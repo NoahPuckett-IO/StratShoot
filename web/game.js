@@ -5,7 +5,7 @@ const MOVE_MS = 120;
 const PICKUP_EVERY_MS = 5000;
 const SPAWNS = [[2, 2], [17, 7]];
 
-// Index = which neighbours are walls: up=1, right=2, down=4, left=8
+// Wall junk: up=1, right=2, down=4, left=8
 const WALL = '+|-+||++-+-+++++';
 
 class Board {
@@ -34,7 +34,7 @@ class Board {
         }
     }
 
-    // Walk a straight line (Bresenham). Blocked if it passes through a wall.
+
     canSee(x0, y0, x1, y1) {
         const dx = Math.abs(x1 - x0), dy = -Math.abs(y1 - y0);
         const sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1;
@@ -110,7 +110,7 @@ class Game {
         }
     }
 
-    // Costs a bullet, kills nothing, everyone sees it.
+    // proves if your armed or not.
     fireFloor(p, now) {
         if (now < p.lockoutUntil || p.ammo === 0) return;
         p.ammo--;
@@ -157,7 +157,7 @@ class Game {
         }
     }
 
-    // Someone disconnected. Mid-match, whoever is left wins.
+    // If someone disconnects mid match, the dude staying wins
     leave(p) {
         if (this.state !== 'playing') {
             this.state = 'over';
@@ -198,7 +198,7 @@ class Game {
         }
         if (this.pickups.some(k => k.x === x && k.y === y)) return 'o ';
 
-        // The floor remembers floor shots: % fresh, * recent, , old.
+        // Floor shot permanence
         let mark = '. ';
         for (const s of this.burns) {
             if (s.x !== x || s.y !== y) continue;
