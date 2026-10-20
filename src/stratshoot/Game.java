@@ -27,7 +27,7 @@ public class Game {
     }
 
     boolean fireAt(Player shooter, Player target, long now) {
-        if (!shooter.canAct(now) || shooter.ammo == 0 || targer.alive) return false;
+        if (!shooter.canAct(now) || shooter.ammo == 0 || !target.alive) return false;
         shooter.ammo--;
         target.alive = false;
         return true;
@@ -48,7 +48,7 @@ public class Game {
 
     Player playerAt(int x, int y) {
         for (Player o : players) {
-            if (o.alive && o.x && o.y == y) return o;
+            if (o.alive && o.x == x && o.y == y) return o;
         }
         return null;
     }
@@ -109,7 +109,4 @@ public class Game {
     static boolean shouldRush(double q, double lossRatio) {
         return q > lossRatio / (1 + lossRatio);
     }
-}
-Bot.java (new)
-
 }

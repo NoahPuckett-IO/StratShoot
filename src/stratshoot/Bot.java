@@ -42,7 +42,7 @@ public class Bot {
     static int[] nearestPickup(Game game, Player me) {
         int[] best = null;
         int bestDist = Integer.MAX_VALUE;
-        for (int[] k : game.pickups {
+        for (int[] k : game.pickups) {
             int d = Math.abs(k[0] - me.x) + Math.abs(k[1] - me.y);
             if (d < bestDist) {
                 bestDist = d;

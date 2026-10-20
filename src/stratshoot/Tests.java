@@ -12,7 +12,7 @@ public class Tests {
 
         check("1 canAct", a.canAct(0));
         check("2 floor shot", g.fireFloor(a, 0) && a.ammo == 1);
-        check("2 lockout", !g.fireFloot(a, 100));
+        check("2 lockout", !g.fireFloor(a, 100));
         check("3 kill", g.fireAt(a, b, 5000) && !b.alive && a.ammo == 0);
         check("3 empty", !g.fireAt(a, b, 9000));
         check("4 rush", Game.shouldRush(0.8, 3) && !Game.shouldRush(0.7, 3));

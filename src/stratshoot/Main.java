@@ -10,6 +10,13 @@ public class Main {
         Rules.show();
         System.out.print("Play against the bot? (y/n) ");
         boolean vsBot = in.nextLine().trim().equalsIgnoreCase("y");
+        System.out.print("Player 1 name: ");
+        String name1 = in.nextLine().trim();
+        String name2 = "Bot";
+        if (!vsBot) {
+            System.out.print("Player 2 name: ");
+            name2 = in.nextLine().trim();
+        }
 
         Board board = new Board(20, 10);
         board.addWall(6, 3, 2, 3);
@@ -17,8 +24,8 @@ public class Main {
         board.addWall(10, 7, 1, 1);
 
         Game game = new Game();
-        Player noah = new Player("Noah", 2, 2);
-        Player hruss = new Player(vsBot ? "Bot" : "Hruss", 17, 7);
+        Player noah = new Player(name1, 2, 2);
+        Player hruss = new Player(name2, 17, 7);
         game.players.add(noah);
         game.players.add(hruss);
 
@@ -50,8 +57,14 @@ public class Main {
                 System.out.println(p.name + "'s turn.  Your ammo: " + p.ammo);
                 System.out.print("w/a/s/d move, f floor shot, x shoot, p pass, q quit > ");
                 String line = in.nextLine().trim();
-                if (line.isEmpty()) continue;
-                cmd = line.charAt(0);
+                if (line.equals("q")) return null;
+                // Turn order decides who acts, so matching initials can't clash.
+                char me = Character.toLowerCase(p.name.charAt(0));
+                if (line.length() != 2 || Character.toLowerCase(line.charAt(0)) != me) {
+                    System.out.println("Type " + me + " + action, like " + me + "d");
+                    continue;
+                }
+                cmd = line.charAt(1);
             }
             if (cmd == 'q') return null;
             act(game, board, p, other, cmd);
