@@ -1,7 +1,6 @@
 package stratshoot;
 
 //Plays a seat using the rush rule from the design.
-//kdjflskdjfjsldkfjssdkfjslskdjflskkdjflskdjflskdjflskdjflkjlkjlkjkjkjlkjlkjkjkj
 public class Bot {
     static final double LOSS_RATIO=3;
 
