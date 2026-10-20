@@ -1,0 +1,74 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>StratShoot</title>
+</head>
+<body>
+<h1>StratShoot</h1>
+
+<div id="join">
+  Name: <input id="name" maxlength="16"> <button id="play">Play</button>
+</div>
+<button id="again" hidden>Play again</button>
+
+<pre id="view"></pre>
+<p id="status"></p>
+
+<p>WASD move. F floor shot. Space shoot.</p>
+
+<h2>Rules</h2>
+<p>You hold up to 2 bullets. Nobody sees your ammo but you. One shot kills.</p>
+<p>A floor shot wastes a bullet but proves you're armed. At 2 you stay armed. At 1 you just emptied yourself.</p>
+<p>A quiet player is either empty or holding. Rush them or don't.</p>
+<p>You are @. o is ammo. Scorch marks (, *) show every floor shot.</p>
+
+<h2>Leaderboard</h2>
+<ol id="board"></ol>
+
+<script>
+const ws = new WebSocket(`ws://${location.host}`);
+const $ = id => document.getElementById(id);
+const KEYS = { w: 'w', a: 'a', s: 's', d: 'd', f: 'f', ' ': 'x' };
+
+$('play').onclick = join;
+$('again').onclick = join;
+
+function join() {
+  ws.send(JSON.stringify({ type: 'join', name: $('name').value }));
+  $('join').hidden = true;
+  $('again').hidden = true;
+  $('name').blur();
+}
+
+ws.onmessage = e => {
+  const msg = JSON.parse(e.data);
+  $('view').textContent = msg.text;
+  $('status').textContent = msg.status;
+  if (msg.over) {
+    $('again').hidden = false;
+    loadBoard();
+  }
+};
+
+document.onkeydown = e => {
+  if (document.activeElement === $('name')) return;
+  const cmd = KEYS[e.key.toLowerCase()];
+  if (!cmd) return;
+  e.preventDefault();
+  ws.send(JSON.stringify({ type: 'act', cmd }));
+};
+
+async function loadBoard() {
+  const rows = await (await fetch('/leaderboard')).json();
+  $('board').innerHTML = '';
+  for (const r of rows) {
+    const li = document.createElement('li');
+    li.textContent = `${r.name}: ${r.wins}W ${r.losses}L`;
+    $('board').append(li);
+  }
+}
+loadBoard();
+</script>
+</body>
+</html>
