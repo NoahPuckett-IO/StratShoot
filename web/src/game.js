@@ -254,6 +254,7 @@ class Game {
       walls: this.board.walls,
       me: { x: viewer.x, y: viewer.y, fx: viewer.fx, fy: viewer.fy },
       others,
+      burns: this.burns.map(b => ({ x: b.x, y: b.y })), // scorch spots for 3D
     };
   }
 

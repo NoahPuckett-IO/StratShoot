@@ -27,7 +27,11 @@ const deadMat = new THREE.MeshLambertMaterial({ color: 0x222222 });
 
 const wallGroup = new THREE.Group();
 const playerGroup = new THREE.Group();
-scene.add(wallGroup, playerGroup);
+// Scorch marks: dark burnt circles on the floor wherever someone fired into it
+const scorchGeo = new THREE.CircleGeometry(0.35, 16);
+const scorchMat = new THREE.MeshBasicMaterial({ color: 0x111111, transparent: true, opacity: 0.8 });
+const scorchGroup = new THREE.Group();
+scene.add(wallGroup, playerGroup, scorchGroup);
 let lastWalls = '';
 
 // Grid x -> 3D x, grid y -> 3D z. Each tile is 1x1.
@@ -47,7 +51,15 @@ window.onState = state => {
         }));
     }
 
-    playerGroup.clear();
+    scorchGroup.clear();
+  for (const b of state.burns || []) {
+    const mark = new THREE.Mesh(scorchGeo, scorchMat);
+    mark.rotation.x = -Math.PI / 2;            // lay it flat
+    mark.position.set(b.x + 0.5, 0.01, b.y + 0.5); // just above the floor so it doesn't flicker
+    scorchGroup.add(mark);
+  }
+
+  playerGroup.clear();
     for (const o of state.others) {
         const body = new THREE.Mesh(playerGeo, o.alive ? aliveMat : deadMat);
         body.position.set(o.x + 0.5, o.alive ? 0.7 : 0.3, o.y + 0.5);

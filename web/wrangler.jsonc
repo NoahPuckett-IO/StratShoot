@@ -23,6 +23,6 @@
 
   // D1 = Cloudflare's SQL database. Paste the id from `wrangler d1 create` here.
   "d1_databases": [
-    { "binding": "DB", "database_name": "stratshoot", "database_id": "PASTE-ID-HERE" }
+    { "binding": "DB", "database_name": "stratshoot", "database_id": "06e43b1e-e46e-4864-9e99-7aacfa984e3a" }
   ]
 }
