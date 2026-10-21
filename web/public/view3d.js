@@ -27,18 +27,19 @@ const deadMat = new THREE.MeshLambertMaterial({ color: 0x222222 });
 
 const wallGroup = new THREE.Group();
 const playerGroup = new THREE.Group();
-// Scorch marks: dark burnt circles on the floor wherever someone fired into it
+
+//actual scorch marks for the scorch
 const scorchGeo = new THREE.CircleGeometry(0.35, 16);
 const scorchMat = new THREE.MeshBasicMaterial({ color: 0x111111, transparent: true, opacity: 0.8 });
 const scorchGroup = new THREE.Group();
 scene.add(wallGroup, playerGroup, scorchGroup);
 let lastWalls = '';
 
-// Grid x -> 3D x, grid y -> 3D z. Each tile is 1x1.
+// gridding
 window.onState = state => {
     if (!state) return;
 
-    // Only rebuild walls when they change (the closing rings)
+    // walls closing in
     const key = JSON.stringify(state.walls);
     if (key !== lastWalls) {
         lastWalls = key;
@@ -67,7 +68,7 @@ window.onState = state => {
         playerGroup.add(body);
     }
 
-    // First person: eye height 1.2, looking the way you face
+    // camera correcting
     const { x, y, fx, fy } = state.me;
     camera.position.set(x + 0.5, 1.2, y + 0.5);
     camera.lookAt(x + 0.5 + fx, 1.2, y + 0.5 + fy);
