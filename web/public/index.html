@@ -8,20 +8,41 @@
 <h1>StratShoot</h1>
 
 <div id="join">
-  Name: <input id="name" maxlength="16"> <button id="play">Play</button>
+  Name: <input id="name" maxlength="16"><br>
+  Room: <input id="room" maxlength="6"> (leave blank for a random 1v1)<br>
+  <button id="play">Play</button>
 </div>
+<button id="start" hidden>Start</button>
 <button id="again" hidden>Play again</button>
+<canvas id="three" width="640" height="360"></canvas>
 
 <pre id="view"></pre>
 <p id="status"></p>
 
-<p>WASD move. F floor shot. Space shoot.</p>
+<p>WASD move and turn. F floor shot. Space shoot the way you face.</p>
 
-<h2>Rules</h2>
+<details>
+<summary>Rules</summary>
+<p>2 to 4 players. Last one alive wins.</p>
 <p>You hold up to 2 bullets. Nobody sees your ammo but you. One shot kills.</p>
+<p>Shots fly straight the way you face. A miss still costs the bullet.</p>
 <p>A floor shot wastes a bullet but proves you're armed. At 2 you stay armed. At 1 you just emptied yourself.</p>
 <p>A quiet player is either empty or holding. Rush them or don't.</p>
-<p>You are @. o is ammo. Scorch marks (, *) show every floor shot.</p>
+<p>Every shot is heard. A ! shows where it came from, even through walls.</p>
+<p>After 60 seconds the walls close in, one ring every 15 seconds. Get caught in one and you die.</p>
+</details>
+
+<details>
+<summary>Legend</summary>
+<p>@ you. Letters are other players. Arrows show where someone faces.</p>
+<p>o ammo. X dead. ! gunshot heard. % * , scorch marks, fresh to old.</p>
+<p>Blank space is fog: you can't see it.</p>
+</details>
+
+<details>
+<summary>Rooms</summary>
+<p>Type any code, like BEANS, and tell your friends the same code. The first one in presses Start.</p>
+</details>
 
 <h2>Leaderboard</h2>
 <ol id="board"></ol>
@@ -33,26 +54,29 @@ const KEYS = { w: 'w', a: 'a', s: 's', d: 'd', f: 'f', ' ': 'x' };
 
 $('play').onclick = join;
 $('again').onclick = join;
+$('start').onclick = () => ws.send(JSON.stringify({ type: 'start' }));
 
 function join() {
-  ws.send(JSON.stringify({ type: 'join', name: $('name').value }));
+  ws.send(JSON.stringify({ type: 'join', name: $('name').value, room: $('room').value }));
   $('join').hidden = true;
   $('again').hidden = true;
-  $('name').blur();
+  document.activeElement.blur();
 }
 
 ws.onmessage = e => {
   const msg = JSON.parse(e.data);
   $('view').textContent = msg.text;
   $('status').textContent = msg.status;
+  $('start').hidden = !msg.host;
   if (msg.over) {
     $('again').hidden = false;
+    $('join').hidden = false;
     loadBoard();
   }
 };
 
 document.onkeydown = e => {
-  if (document.activeElement === $('name')) return;
+  if (document.activeElement.tagName === 'INPUT') return;
   const cmd = KEYS[e.key.toLowerCase()];
   if (!cmd) return;
   e.preventDefault();
@@ -70,5 +94,9 @@ async function loadBoard() {
 }
 loadBoard();
 </script>
+<script type="importmap">
+  { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js" } }
+</script>
+<script type="module" src="/view3d.js"></script>
 </body>
 </html>

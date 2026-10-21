@@ -27,10 +27,10 @@ const upsert = db.prepare(`
 const addMatch = db.prepare('INSERT INTO matches (winner, loser, floor_shots) VALUES (?, ?, ?)');
 const top = db.prepare('SELECT name, wins, losses FROM players ORDER BY wins DESC LIMIT 10');
 
-function recordResult(winner, loser, floorShots) {
+function recordResult(winner, losers, floorShots) {
   upsert.run(winner, 1, 0);
-  upsert.run(loser, 0, 1);
-  addMatch.run(winner, loser, floorShots);
+  for (const name of losers) upsert.run(name, 0, 1);
+  addMatch.run(winner, losers.join(', '), floorShots);
 }
 
 function leaderboard() {

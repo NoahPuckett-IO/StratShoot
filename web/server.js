@@ -18,20 +18,36 @@ const server = http.createServer((req, res) => {
     fs.createReadStream(path.join(__dirname, 'public', 'index.html')).pipe(res);
     return;
   }
+  if (reg.url === '/view3d.js') {
+    res.setHeader('Content-Type', 'text/javascript');
+    fs.createReadStream(path(join(__dirname, 'public', 'view3d.js')).pipe(res);
+    return;
+  }
+
   res.statusCode = 404;
   res.end();
 });
 
 const wss = new WebSocketServer({ server });
 const games = new Set();
-let waiting = null;
+const rooms = new Map();
+let queue = null;
 
 wss.on('connection', ws => {
   ws.on('message', raw => {
     let msg;
     try { msg = JSON.parse(raw); } catch { return; }
+
     if (msg.type === 'join' && !ws.game) {
-      join(ws, String(msg.name || '').trim().slice(0, 16) || 'anon');
+      const name = String(msg.name || '').trim().slice(0, 16) || 'anon';
+      const code = String(msg.room || '').trim().toUpperCase().slice(0, 6);
+      if (code) joinRoom(ws, name, code);
+      else joinQueue(ws, name);
+    } else if (msg.type === 'start' && ws.game) {
+      const g = ws.game;
+      if (g.state === 'waiting' && g.host === ws.player && g.players.length >= 2) {
+        g.start(Date.now());
+      }
     } else if (msg.type === 'act' && ws.game) {
       ws.game.act(ws.player, msg.cmd, Date.now());
     }
@@ -44,19 +60,40 @@ wss.on('connection', ws => {
   });
 });
 
-function join(ws, name) {
-  if (!waiting) {
-    waiting = new Game();
-    games.add(waiting);
+// Random 1v1: starts as soon as two people are waiting.
+function joinQueue(ws, name) {
+  if (!queue) {
+    queue = new Game(null, 2);
+    games.add(queue);
   }
-  const g = waiting;
-  ws.game = g;
-  ws.player = g.addPlayer(name);
-  g.sockets.push(ws);
+  const g = queue;
+  seat(ws, g, name);
   if (g.players.length === 2) {
     g.start(Date.now());
-    waiting = null;
+    queue = null;
   }
+}
+
+// Private room: up to 4, the first player in is host and presses Start.
+function joinRoom(ws, name, code) {
+  let g = rooms.get(code);
+  if (!g) {
+    g = new Game(code, 4);
+    rooms.set(code, g);
+    games.add(g);
+  }
+  if (!seat(ws, g, name)) {
+    send(ws, { text: '', status: `Room ${code} is full or already playing.`, over: true });
+  }
+}
+
+function seat(ws, g, name) {
+  const p = g.addPlayer(name);
+  if (!p) return false;
+  ws.game = g;
+  ws.player = p;
+  g.sockets.push(ws);
+  return true;
 }
 
 // 10 times a second: update every match and send each player their own view.
@@ -68,6 +105,7 @@ setInterval(() => {
       send(ws, {
         text: g.render(ws.player, now),
         status: g.status(ws.player, now),
+        host: g.state === 'waiting' && g.host === ws.player && g.code !== null,
         over: g.state === 'over',
       });
     }
@@ -77,10 +115,11 @@ setInterval(() => {
 
 function finish(g) {
   games.delete(g);
-  if (waiting === g) waiting = null;
+  if (queue === g) queue = null;
+  if (g.code && rooms.get(g.code) === g) rooms.delete(g.code);
   if (g.winner) {
-    const loser = g.players.find(p => p !== g.winner);
-    db.recordResult(g.winner.name, loser.name, g.burns.length);
+    const losers = g.players.filter(p => p !== g.winner).map(p => p.name);
+    db.recordResult(g.winner.name, losers, g.burns.length);
   }
   for (const ws of g.sockets) ws.game = null;
 }
