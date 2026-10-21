@@ -16,7 +16,7 @@
 <button id="again" hidden>Play again</button>
 <canvas id="three" width="640" height="360"></canvas>
 
-<pre id="view"></pre>
+<pre id="view" style="position:fixed;top:0;right:0"></pre>
 <p id="status"></p>
 
 <p>WASD move and turn. F floor shot. Space shoot the way you face.</p>
@@ -67,7 +67,8 @@ ws.onmessage = e => {
   const msg = JSON.parse(e.data);
   $('view').textContent = msg.text;
   $('status').textContent = msg.status;
-  $('start').hidden = !msg.host;
+  if (window.onState) window.onState(msg.view);
+    $('start').hidden = !msg.host;
   if (msg.over) {
     $('again').hidden = false;
     $('join').hidden = false;

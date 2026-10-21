@@ -40,7 +40,7 @@ class Board {
     }
   }
 
-  // Walk a straight line (Bresenham). Blocked if it passes through a wall.
+  // walls
   canSee(x0, y0, x1, y1) {
     const dx = Math.abs(x1 - x0), dy = -Math.abs(y1 - y0);
     const sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1;
@@ -127,7 +127,7 @@ class Game {
     }
   }
 
-  // Costs a bullet, kills nothing, everyone hears it.
+  // floor firing what it does
   fireFloor(p, now) {
     if (now < p.lockoutUntil || p.ammo === 0) return;
     p.ammo--;
@@ -138,8 +138,7 @@ class Game {
     this.noises.push({ x: p.x, y: p.y, t: now });
   }
 
-  // Fires straight the way you face. Misses still cost the bullet.
-  // With no ammo nothing happens, so an empty trigger pull is silent.
+  // shooting junk logic
   shoot(p, now) {
     if (now < p.lockoutUntil || p.ammo === 0) return;
     p.ammo--;
@@ -186,7 +185,7 @@ class Game {
     }
   }
 
-  // Ring k (0 = outer border) turns to wall. Anyone standing on it dies.
+  // making place smaller
   closeRing(k) {
     const b = this.board;
     for (let y = k; y < b.h - k; y++) {
@@ -231,6 +230,19 @@ class Game {
       out += '\n';
     }
     return out;
+  }
+
+  //three.js actually works due to this
+  view(viewer) {
+    const showAll = this.state === 'over' || !viewer.alive;
+    const others = this.players
+        .filter(p => p !== viewer && (showAll || this.board.canSee(viewer.x, viewer.y, p.x, p.y)))
+        .map(p => ({ x: p.x, y: p.y, alive: p.alive }));
+    return {
+      walls: this.board.walls,
+      me: { x: viewer.x, y: viewer.y, fx: viewer.fx, fy: viewer.fy },
+      others,
+    };
   }
 
   tile(viewer, x, y, now) {

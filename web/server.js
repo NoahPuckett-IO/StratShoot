@@ -18,9 +18,9 @@ const server = http.createServer((req, res) => {
     fs.createReadStream(path.join(__dirname, 'public', 'index.html')).pipe(res);
     return;
   }
-  if (reg.url === '/view3d.js') {
+  if (req.url === '/view3d.js') {
     res.setHeader('Content-Type', 'text/javascript');
-    fs.createReadStream(path(join(__dirname, 'public', 'view3d.js')).pipe(res);
+    fs.createReadStream(path.join(__dirname, 'public', 'view3d.js')).pipe(res);
     return;
   }
 
@@ -74,7 +74,7 @@ function joinQueue(ws, name) {
   }
 }
 
-// Private room: up to 4, the first player in is host and presses Start.
+// private room
 function joinRoom(ws, name, code) {
   let g = rooms.get(code);
   if (!g) {
@@ -96,13 +96,14 @@ function seat(ws, g, name) {
   return true;
 }
 
-// 10 times a second: update every match and send each player their own view.
+// 10 per sec. auto updates junk
 setInterval(() => {
   const now = Date.now();
   for (const g of games) {
     g.tick(now);
     for (const ws of g.sockets) {
       send(ws, {
+        view: g.view(ws.player),
         text: g.render(ws.player, now),
         status: g.status(ws.player, now),
         host: g.state === 'waiting' && g.host === ws.player && g.code !== null,
