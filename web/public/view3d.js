@@ -1,12 +1,14 @@
+//stupid imports
 import * as THREE from 'three';
 
+//stupid constants
 const canvas = document.getElementById('three');
 const renderer = new THREE.WebGLRenderer({ canvas });
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x87ceeb);
 const camera = new THREE.PerspectiveCamera(75, canvas.width / canvas.height, 0.1, 100);
 
-// Lights so things aren't pitch black
+// Lights camera action
 scene.add(new THREE.AmbientLight(0xffffff, 0.6));
 const sun = new THREE.DirectionalLight(0xffffff, 1);
 sun.position.set(5, 10, 5);
@@ -19,15 +21,14 @@ const floor = new THREE.Mesh(
 floor.rotation.x = -Math.PI / 2;
 scene.add(floor);
 
+//more stupid constants
 const wallGeo = new THREE.BoxGeometry(1, 2, 1);
 const wallMat = new THREE.MeshLambertMaterial({ color: 0x996633 });
 const playerGeo = new THREE.CapsuleGeometry(0.3, 0.8);
 const aliveMat = new THREE.MeshLambertMaterial({ color: 0xff3333 });
 const deadMat = new THREE.MeshLambertMaterial({ color: 0x222222 });
-
 const wallGroup = new THREE.Group();
 const playerGroup = new THREE.Group();
-
 //actual scorch marks for the scorch
 const scorchGeo = new THREE.CircleGeometry(0.35, 16);
 const scorchMat = new THREE.MeshBasicMaterial({ color: 0x111111, transparent: true, opacity: 0.8 });

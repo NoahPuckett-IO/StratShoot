@@ -124,14 +124,14 @@ function send(msg) {
 
 // Keyboard controls
 document.onkeydown = e => {
-  if (document.activeElement.tagName === 'INPUT') return; // typing your name, not playing
+  if (document.activeElement.tagName === 'INPUT') return; //name
   const cmd = KEYS[e.key.toLowerCase()];
   if (!cmd) return;
-  e.preventDefault(); // stops space from scrolling the page
+  e.preventDefault(); //stops the spacebar from scrolling
   send({ type: 'act', cmd });
 };
 
-// Fill in the leaderboard list from the database
+// Leaderboard
 async function loadBoard() {
   const rows = await (await fetch('/api/leaderboard')).json();
   $('board').innerHTML = '';
@@ -142,6 +142,7 @@ async function loadBoard() {
   }
 }
 loadBoard();
+//importing three.js from CDN
 </script>
 <script type="importmap">
   { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js" } }
