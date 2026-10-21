@@ -1,0 +1,28 @@
+// Cloudflare's settings file. Tells it what our Worker is called,
+// where the code starts, where the web page files are, and what
+// extra stuff (rooms + database) it gets hooked up to.
+{
+  "name": "stratshoot",
+  "main": "src/worker.js",
+  "compatibility_date": "2026-10-01",
+
+  // Everything in public/ (index.html, view3d.js) gets served as the website
+  "assets": { "directory": "./public", "binding": "ASSETS" },
+
+  // Durable Objects = tiny servers that stay alive. One Room per room code,
+  // one Matchmaker for the whole site.
+  "durable_objects": {
+    "bindings": [
+      { "name": "ROOM", "class_name": "Room" },
+      { "name": "MATCHMAKER", "class_name": "Matchmaker" }
+    ]
+  },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["Room", "Matchmaker"] }
+  ],
+
+  // D1 = Cloudflare's SQL database. Paste the id from `wrangler d1 create` here.
+  "d1_databases": [
+    { "binding": "DB", "database_name": "stratshoot", "database_id": "PASTE-ID-HERE" }
+  ]
+}

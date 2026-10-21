@@ -7,19 +7,25 @@
 <body>
 <h1>StratShoot</h1>
 
-<div id="join">
+<!-- Menu: pick a name, then quick play, make a room, or join a friend's code -->
+<div id="menu">
   Name: <input id="name" maxlength="16"><br>
-  Room: <input id="room" maxlength="6"> (leave blank for a random 1v1)<br>
-  <button id="play">Play</button>
+  <button id="quick">Quick play</button>
+  <button id="create">Create room</button><br>
+  Code: <input id="code" maxlength="6"> <button id="joinRoom">Join room</button>
 </div>
+<p id="roomInfo"></p>
 <button id="start" hidden>Start</button>
 <button id="again" hidden>Play again</button>
+
+<!-- The 3D view (view3d.js draws in here) -->
 <canvas id="three" width="640" height="360"></canvas>
 
+<!-- ASCII minimap, pinned top right -->
 <pre id="view" style="position:fixed;top:0;right:0"></pre>
 <p id="status"></p>
 
-<p>WASD move and turn. F floor shot. Space shoot the way you face.</p>
+<p>W forward. S back. A/D turn. F floor shot. Space shoot.</p>
 
 <details>
 <summary>Rules</summary>
@@ -41,51 +47,93 @@
 
 <details>
 <summary>Rooms</summary>
-<p>Type any code, like BEANS, and tell your friends the same code. The first one in presses Start.</p>
+<p>Create room gives you a code. Send it to friends, they type it and hit Join. You press Start.</p>
 </details>
 
 <h2>Leaderboard</h2>
 <ol id="board"></ol>
 
 <script>
-const ws = new WebSocket(`ws://${location.host}`);
+// Tiny helper so we can write $('name') instead of document.getElementById('name')
 const $ = id => document.getElementById(id);
-const KEYS = { w: 'w', a: 'a', s: 's', d: 'd', f: 'f', ' ': 'x' };
 
-$('play').onclick = join;
-$('again').onclick = join;
-$('start').onclick = () => ws.send(JSON.stringify({ type: 'start' }));
+// Which key sends which command to the server
+const KEYS = { w: 'fwd', s: 'back', a: 'left', d: 'right', f: 'f', ' ': 'x' };
 
-function join() {
-  ws.send(JSON.stringify({ type: 'join', name: $('name').value, room: $('room').value }));
-  $('join').hidden = true;
-  $('again').hidden = true;
-  document.activeElement.blur();
+let ws = null;   // our live connection to the room
+let last = null; // the last room we joined, so Play again knows where to go
+
+// Hook up the buttons
+$('quick').onclick = quickPlay;
+$('create').onclick = createRoom;
+$('joinRoom').onclick = () => {
+  const code = $('code').value.trim().toUpperCase();
+  if (code) connect(code, false);
+};
+$('start').onclick = () => send({ type: 'start' });
+$('again').onclick = () => (last.quick ? quickPlay() : connect(last.code, false));
+
+// Ask the server for a quick play code, then jump in
+async function quickPlay() {
+  const { code } = await (await fetch('/api/quick')).json();
+  connect(code, true);
 }
 
-ws.onmessage = e => {
-  const msg = JSON.parse(e.data);
-  $('view').textContent = msg.text;
-  $('status').textContent = msg.status;
-  if (window.onState) window.onState(msg.view);
-    $('start').hidden = !msg.host;
-  if (msg.over) {
-    $('again').hidden = false;
-    $('join').hidden = false;
-    loadBoard();
-  }
-};
+// Ask the server for a brand new room code, then jump in (you're the host)
+async function createRoom() {
+  const { code } = await (await fetch('/api/rooms', { method: 'POST' })).json();
+  connect(code, false);
+}
 
+// Open the websocket to a room. Same code = same room as your friends.
+function connect(code, quick) {
+  last = { code, quick };
+  // https sites need wss (secure websockets), local testing uses plain ws
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  const q = new URLSearchParams({ code, quick: quick ? '1' : '0', name: $('name').value });
+  ws = new WebSocket(`${proto}://${location.host}/api/play?${q}`);
+  ws.onmessage = onMessage;
+
+  // Match ended or connection dropped: back to the menu
+  ws.onclose = () => {
+    $('menu').hidden = false;
+    $('again').hidden = false;
+    $('start').hidden = true;
+    loadBoard();
+  };
+
+  $('menu').hidden = true;
+  $('again').hidden = true;
+  $('roomInfo').textContent = quick ? 'Quick play' : `Room code: ${code}  (send this to your friends)`;
+  document.activeElement.blur(); // so WASD goes to the game, not a text box
+}
+
+// The server sends this 10 times a second
+function onMessage(e) {
+  const msg = JSON.parse(e.data);
+  $('view').textContent = msg.text;                 // minimap
+  $('status').textContent = msg.status;             // ammo, timer, etc
+  $('start').hidden = !msg.host;                    // only the host sees Start
+  if (window.onState) window.onState(msg.view);     // 3D view
+}
+
+// Send something to the server (only if we're actually connected)
+function send(msg) {
+  if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg));
+}
+
+// Keyboard controls
 document.onkeydown = e => {
-  if (document.activeElement.tagName === 'INPUT') return;
+  if (document.activeElement.tagName === 'INPUT') return; // typing your name, not playing
   const cmd = KEYS[e.key.toLowerCase()];
   if (!cmd) return;
-  e.preventDefault();
-  ws.send(JSON.stringify({ type: 'act', cmd }));
+  e.preventDefault(); // stops space from scrolling the page
+  send({ type: 'act', cmd });
 };
 
+// Fill in the leaderboard list from the database
 async function loadBoard() {
-  const rows = await (await fetch('/leaderboard')).json();
+  const rows = await (await fetch('/api/leaderboard')).json();
   $('board').innerHTML = '';
   for (const r of rows) {
     const li = document.createElement('li');
