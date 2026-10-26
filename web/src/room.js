@@ -2,6 +2,7 @@
 // Everyone who connects with the same code ends up in here together.
 import { Game } from './game.js';
 import { recordResult } from './db.js';
+import { botThink } from './bot.js';
 
 export class Room {
   constructor(ctx, env) {
@@ -59,6 +60,12 @@ export class Room {
       if (msg.type === 'start') {
         // Only the host can start, and only with 2+ people
         if (g.state === 'waiting' && g.host === player && g.players.length >= 2) g.start(now);
+      } else if (msg.type === 'bot') {
+        // host adds a bot while waiting
+        if (g.state === 'waiting' && g.host === player) {
+          const b = g.addPlayer('Bot ' + g.players.length);
+          if (b) b.bot = true;
+        }
       } else if (msg.type === 'act') {
         g.act(player, msg.cmd, now); // moves, turns, shots
       }
@@ -83,6 +90,12 @@ export class Room {
     const g = this.game;
     const now = Date.now();
     g.tick(now);
+    // bots pick a move like a player pressing a key
+    for (const p of g.players) {
+      if (!p.bot) continue;
+      const cmd = botThink(g, p, now);
+      if (cmd) g.act(p, cmd, now);
+    }
     for (const c of this.conns) {
       send(c.ws, {
         view: g.view(c.player, now),
@@ -103,8 +116,9 @@ export class Room {
     this.conns.clear();
     for (const c of conns) c.ws.close(1000, 'match over');
     if (g.winner) {
-      const losers = g.players.filter(p => p !== g.winner).map(p => p.name);
-      await recordResult(this.env.DB, g.winner.name, losers, g.burns.length);
+      // bots don't go on the leaderboard
+      const losers = g.players.filter(p => p !== g.winner && !p.bot).map(p => p.name);
+      if (!g.winner.bot) await recordResult(this.env.DB, g.winner.name, losers, g.burns.length);
     }
   }
 }

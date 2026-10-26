@@ -89,7 +89,7 @@ class Game {
     if (this.state !== 'waiting' || this.players.length >= this.maxPlayers) return null;
     const [x, y] = SPAWNS[this.players.length];
     const p = {
-      drawUntil: 0, shots: 0, kills: 0,
+      drawUntil: 0, shots: 0, kills: 0, pickups: 0, bot: false,
       offerTo: null, offerUntil: 0,
       ally: null, traitorUntil: 0,
       name, x, y,
@@ -141,6 +141,7 @@ class Game {
     const i = this.pickups.findIndex(k => k.x === nx && k.y === ny);
     if (i >= 0 && p.ammo < MAX_AMMO) {
       p.ammo++;
+      p.pickups++; // public: others can count this
       this.pickups.splice(i, 1);
       this.noises.push({ x: nx, y: ny, t: now });
     }
@@ -336,8 +337,9 @@ class Game {
   leave(p) {
     if (this.state === 'waiting') {
       this.players = this.players.filter(o => o !== p);
-      if (this.host === p) this.host = this.players[0] || null;
-      if (this.players.length === 0) this.state = 'over';
+      // host goes to the next human. only bots left = room's dead
+      if (this.host === p) this.host = this.players.find(o => !o.bot) || null;
+      if (!this.host) this.state = 'over';
       return;
     }
     p.alive = false;
