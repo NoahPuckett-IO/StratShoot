@@ -19,19 +19,26 @@
 <button id="again" hidden>Play again</button>
 
 <!-- The 3D view (view3d.js draws in here) -->
-<canvas id="three" width="640" height="360"></canvas>
+<canvas id="three" style="position:fixed;top:0;left:0;z-index:-1"></canvas>
 
-<!-- ASCII minimap, pinned top right -->
-<pre id="view" style="position:fixed;top:0;right:0"></pre>
+<!-- minimap (minimap.js draws it), pinned top right -->
+<canvas id="mini" style="position:fixed;top:8px;right:8px"></canvas>
 <p id="status"></p>
+<p id="odds"></p>
+<pre id="feed"></pre>
+<pre id="ledger"></pre>
 
-<p>W forward. S back. A/D turn. F floor shot. Space shoot.</p>
+<p>W forward. S back. A/D turn. F floor shot. Space aim + shoot. T offer truce. G say "I'm loaded".</p>
 
 <details>
 <summary>Rules</summary>
 <p>2 to 4 players. Last one alive wins.</p>
 <p>You hold up to 2 bullets. Nobody sees your ammo but you. One shot kills.</p>
-<p>Shots fly straight the way you face. A miss still costs the bullet.</p>
+<p>Space starts aiming. A moment later the shot goes off straight the way you face. You can't move while aiming, and everyone sees your red aim line.</p>
+<p>Closer = better odds. Point blank always lands, far away it's a coin flip. A miss still costs the bullet.</p>
+<p>3+ players: face someone and press T to offer a truce. If they face you and press T back, you're allies and share vision. Shoot your ally and you're a traitor, everyone sees you for 15 seconds. Truces end when only 2 are left.</p>
+<p>G says "I'm loaded" in the feed. Could be true. Could be a bluff.</p>
+<p>Every 10 seconds the player with the most kills gets pinged on everyone's map.</p>
 <p>A floor shot wastes a bullet but proves you're armed. At 2 you stay armed. At 1 you just emptied yourself.</p>
 <p>A quiet player is either empty or holding. Rush them or don't.</p>
 <p>Every shot is heard. A ! shows where it came from, even through walls.</p>
@@ -40,9 +47,9 @@
 
 <details>
 <summary>Legend</summary>
-<p>@ you. Letters are other players. Arrows show where someone faces.</p>
-<p>o ammo. X dead. ! gunshot heard. % * , scorch marks, fresh to old.</p>
-<p>Blank space is fog: you can't see it.</p>
+<p>Minimap: green arrow is you, red arrows are enemies, cyan is your ally, pink is a traitor.</p>
+<p>Gold diamonds are ammo. White rings are gunshots you heard, red rings are bounty pings.</p>
+<p>Dark spots are scorch marks from floor shots. Black squares are fog: you can't see there.</p>
 </details>
 
 <details>
@@ -58,7 +65,7 @@
 const $ = id => document.getElementById(id);
 
 // Which key sends which command to the server
-const KEYS = { w: 'fwd', s: 'back', a: 'left', d: 'right', f: 'f', ' ': 'x' };
+const KEYS = { w: 'fwd', s: 'back', a: 'left', d: 'right', f: 'f', ' ': 'x', t: 't', g: 'g' };
 
 let ws = null;   // our live connection to the room
 let last = null; // the last room we joined, so Play again knows where to go
@@ -111,10 +118,21 @@ function connect(code, quick) {
 // The server sends this 10 times a second
 function onMessage(e) {
   const msg = JSON.parse(e.data);
-  $('view').textContent = msg.text;                 // minimap
+  const v = msg.view;
   $('status').textContent = msg.status;             // ammo, timer, etc
   $('start').hidden = !msg.host;                    // only the host sees Start
-  if (window.onState) window.onState(msg.view);     // 3D view
+  if (window.onState) window.onState(v);            // 3D view + minimap
+  if (!v) return;
+  // hit chance on whoever you're lined up with
+  $('odds').textContent = v.odds ? `Lined up on ${v.odds.name}: ${v.odds.chance}% to hit` : '';
+  // last few things that happened
+  $('feed').textContent = v.feed.join('
+');
+  // everyone's public shot count (shots are loud, so this isn't cheating)
+  $('ledger').textContent = v.ledger
+    .map(p => `${p.alive ? ' ' : 'x'} ${p.name}: ${p.shots} shots, ${p.kills} kills`)
+    .join('
+');
 }
 
 // Send something to the server (only if we're actually connected)
@@ -142,6 +160,7 @@ async function loadBoard() {
   }
 }
 loadBoard();
+
 //importing three.js from CDN
 </script>
 <script type="importmap">

@@ -9,9 +9,15 @@ const ZONE_START_MS = 60000;
 const ZONE_EVERY_MS = 15000;
 const MAX_RING = 3;
 const SPAWNS = [[2, 2], [17, 7], [17, 2], [2, 7]];
+const DRAW_MS = 400;
+const OFFER_MS = 5000;
+const TRAITOR_MS = 15000;
+const BOUNTY_EVERY_MS = 10000;
+const FEED_MAX = 5;
 
-// walls?: up=1, right=2, down=4, left=8
-const WALL = '+|-+||++-+-+++++';
+function hitChance(dist) {
+  return Math.max(0.35, 1 - 0.08 * (dist - 1));
+}
 
 //getting board for minimap
 class Board {
@@ -27,6 +33,7 @@ class Board {
       this.walls.push(row);
     }
   }
+
 //whats a wall?
   isWall(x, y) {
     return x >= 0 && y >= 0 && x < this.w && y < this.h && this.walls[y][x];
@@ -65,7 +72,8 @@ class Game {
     this.board.addWall(12, 4, 3, 1);
     this.board.addWall(10, 7, 1, 1);
     this.players = [];
-    this.sockets = [];
+    this.feed = [];
+    this.lastBounty = 0;
     this.burns = [];
     this.noises = [];
     this.pickups = [];
@@ -81,6 +89,9 @@ class Game {
     if (this.state !== 'waiting' || this.players.length >= this.maxPlayers) return null;
     const [x, y] = SPAWNS[this.players.length];
     const p = {
+      drawUntil: 0, shots: 0, kills: 0,
+      offerTo: null, offerUntil: 0,
+      ally: null, traitorUntil: 0,
       name, x, y,
       ammo: MAX_AMMO, alive: true,
       lockoutUntil: 0, scorchUntil: 0, nextMove: 0,
@@ -98,6 +109,7 @@ class Game {
     this.state = 'playing';
     this.startTime = now;
     this.lastPickup = now;
+    this.lastBounty = now;
   }
 
   act(p, cmd, now) {
@@ -108,13 +120,15 @@ class Game {
     else if (cmd === 'left') this.turn(p, p.fy, -p.fx, now);
     else if (cmd === 'right') this.turn(p, -p.fy, p.fx, now);
     else if (cmd === 'f') this.fireFloor(p, now);
-    else if (cmd === 'x') this.shoot(p, now);
+    else if (cmd === 'x') this.draw(p, now);
+    else if (cmd === 't') this.offerTruce(p, now);
+    else if (cmd === 'g') this.claim(p, now);
     this.checkWinner();
   }
 
   // face = true means "turn to face where you step" (forward). Back-stepping keeps your facing.
   move(p, dx, dy, now, face) {
-    if (now < p.nextMove) return; // too soon since your last step, ignore it
+    if (now < p.nextMove || p.drawUntil) return;
     p.nextMove = now + MOVE_MS;
     if (face) {
       p.fx = dx;
@@ -128,12 +142,13 @@ class Game {
     if (i >= 0 && p.ammo < MAX_AMMO) {
       p.ammo++;
       this.pickups.splice(i, 1);
+      this.noises.push({ x: nx, y: ny, t: now });
     }
   }
 
   // Spin 90 degrees without stepping. Same speed limit as walking.
   turn(p, fx, fy, now) {
-    if (now < p.nextMove) return;
+    if (now < p.nextMove || p.drawUntil) return;
     p.nextMove = now + MOVE_MS;
     p.fx = fx;
     p.fy = fy;
@@ -141,31 +156,113 @@ class Game {
 
   // floor firing what it does
   fireFloor(p, now) {
-    if (now < p.lockoutUntil || p.ammo === 0) return;
+    if (now < p.lockoutUntil || p.ammo === 0 || p.drawUntil) return;
     p.ammo--;
+    p.shots++;
     p.floorShots++;
     p.lockoutUntil = now + LOCKOUT_MS;
     p.scorchUntil = now + SCORCH_MS;
     this.burns.push({ x: p.x, y: p.y, t: now });
     this.noises.push({ x: p.x, y: p.y, t: now });
+    this.log(now, `${p.name} fired at the floor`);
   }
 
   // shooting junk logic
+  log(now, text) {
+    this.feed.push({ t: now, text });
+    if (this.feed.length > FEED_MAX) this.feed.shift();
+  }
+
+  claim(p, now) {
+    if (now < p.nextMove) return;
+    p.nextMove = now + 1000;
+    this.log(now, `${p.name}: "I'm loaded."`);
+  }
+
+  draw(p, now) {
+    if (now < p.lockoutUntil || p.ammo === 0 || p.drawUntil) return;
+    p.drawUntil = now + DRAW_MS;
+  }
+
   shoot(p, now) {
-    if (now < p.lockoutUntil || p.ammo === 0) return;
+    p.drawUntil = 0;
+    if (!p.alive || p.ammo === 0) return;
     p.ammo--;
+    p.shots++;
     p.lockoutUntil = now + LOCKOUT_MS;
     this.noises.push({ x: p.x, y: p.y, t: now });
-    let x = p.x + p.fx, y = p.y + p.fy;
+    let x = p.x + p.fx, y = p.y + p.fy, dist = 1;
     while (!this.board.isWall(x, y)) {
       const hit = this.playerAt(x, y);
       if (hit) {
-        hit.alive = false;
+        if (hit === p.ally) this.betray(p, now);
+        if (Math.random() < hitChance(dist)) {
+          hit.alive = false;
+          p.kills++;
+          this.log(now, `${p.name} killed ${hit.name}`);
+        } else {
+          this.log(now, `${p.name} missed ${hit.name}`);
+        }
         return;
       }
-      x += p.fx;
-      y += p.fy;
+      x += p.fx; y += p.fy; dist++;
     }
+  }
+
+  offerTruce(p, now) {
+    if (p.ally || this.alive().length <= 2) return;
+    const target = this.firstInLine(p);
+    if (!target || target.ally) return;
+    if (target.offerTo === p && now < target.offerUntil) {
+      p.ally = target;
+      target.ally = p;
+      p.offerTo = target.offerTo = null;
+      this.log(now, `${p.name} and ${target.name} made a truce`);
+    } else {
+      p.offerTo = target;
+      p.offerUntil = now + OFFER_MS;
+    }
+  }
+
+  betray(p, now) {
+    const a = p.ally;
+    p.ally = null;
+    if (a) a.ally = null;
+    p.traitorUntil = now + TRAITOR_MS;
+    this.log(now, `${p.name} BETRAYED ${a.name}`);
+  }
+
+  dissolvePacts(now) {
+    let broke = false;
+    for (const p of this.players) if (p.ally) { p.ally = null; broke = true; }
+    if (broke) this.log(now, 'Two left. All truces are over.');
+  }
+
+  firstInLine(p) {
+    let x = p.x + p.fx, y = p.y + p.fy;
+    while (!this.board.isWall(x, y)) {
+      const o = this.playerAt(x, y);
+      if (o) return o;
+      x += p.fx; y += p.fy;
+    }
+    return null;
+  }
+
+  alive() {
+    return this.players.filter(p => p.alive);
+  }
+
+  sees(p, x, y) {
+    const dx = x - p.x, dy = y - p.y;
+    const near = Math.abs(dx) <= 1 && Math.abs(dy) <= 1;
+    if (!near && dx * p.fx + dy * p.fy < 0) return false;
+    return this.board.canSee(p.x, p.y, x, y);
+  }
+
+  visible(viewer, x, y) {
+    if (this.state === 'over' || !viewer.alive) return true;
+    if (this.sees(viewer, x, y)) return true;
+    return !!(viewer.ally && viewer.ally.alive && this.sees(viewer.ally, x, y));
   }
 
   playerAt(x, y) {
@@ -177,12 +274,27 @@ class Game {
     if (now - this.lastPickup >= PICKUP_EVERY_MS) {
       this.lastPickup = now;
       this.spawnPickup();
+      if (now - this.lastBounty >= BOUNTY_EVERY_MS) {
+        this.lastBounty = now;
+        const top = this.alive().sort((a, b) => b.kills - a.kills);
+        if (top[0] && top[0].kills > 0 && (!top[1] || top[0].kills > top[1].kills)) {
+          this.noises.push({ x: top[0].x, y: top[0].y, t: now, bounty: true });
+          this.log(now, `Bounty: ${top[0].name} pinged`);
+        }
+      }
+      if (this.alive().length === 2) this.dissolvePacts(now);
     }
     const ring = Math.floor((now - this.startTime - ZONE_START_MS) / ZONE_EVERY_MS) + 1;
     if (ring > this.zone && this.zone < MAX_RING) {
       this.zone++;
       this.closeRing(this.zone);
     }
+    // aim time's up -> the shot actually fires
+    for (const p of this.alive()) {
+      if (p.drawUntil && now >= p.drawUntil) this.shoot(p, now);
+    }
+    this.noises = this.noises.filter(n => now - n.t < NOISE_MS);
+    this.checkWinner();
   }
 
   spawnPickup() {
@@ -229,68 +341,54 @@ class Game {
       return;
     }
     p.alive = false;
+    if (p.ally) p.ally.ally  = null;
+    p.ally = null;
     this.checkWinner();
   }
 
-  // You are always '@'. Making sure yk where u r
-  render(viewer, now) {
-    let out = '';
-    for (let y = 0; y < this.board.h; y++) {
-      for (let x = 0; x < this.board.w; x++) {
-        out += this.tile(viewer, x, y, now);
-      }
-      out += '\n';
+  //three.js genuinely works because of ts:
+  view(viewer, now) {
+    const b = this.board;
+    const fog = [];
+    for (let y = 0; y < b.h; y++) {
+      const row = [];
+      for (let x = 0; x < b.w; x++) row.push(this.visible(viewer, x, y) ? 1 : 0);
+      fog.push(row);
     }
-    return out;
-  }
-
-  //three.js actually works due to this
-  view(viewer) {
-    const showAll = this.state === 'over' || !viewer.alive;
     const others = this.players
-        .filter(p => p !== viewer && (showAll || this.board.canSee(viewer.x, viewer.y, p.x, p.y)))
-        .map(p => ({ x: p.x, y: p.y, alive: p.alive }));
+        .filter(p => p !== viewer)
+        .filter(p => fog[p.y][p.x] || p === viewer.ally || now < p.traitorUntil)
+        .map(p => ({
+          name: p.name, x: p.x, y: p.y, fx: p.fx, fy: p.fy, alive: p.alive,
+          aiming: !!p.drawUntil,
+          ally: p === viewer.ally,
+          traitor: now < p.traitorUntil,
+          offering: p.offerTo === viewer && now < p.offerUntil,
+        }));
     return {
-      walls: this.board.walls,
-      me: { x: viewer.x, y: viewer.y, fx: viewer.fx, fy: viewer.fy },
+      w: b.w, h: b.h, walls: b.walls, fog,
+      me: { x: viewer.x, y: viewer.y, fx: viewer.fx, fy: viewer.fy, aiming: !!viewer.drawUntil },
       others,
-      burns: this.burns.map(b => ({ x: b.x, y: b.y })), // scorch spots for 3D
+      pickups: this.pickups.filter(k => fog[k.y][k.x]),
+      noises: this.noises.map(n => ({ x: n.x, y: n.y, bounty: !!n.bounty })),
+      burns: this.burns.map(s => ({ x: s.x, y: s.y, age: now - s.t })),
+      ledger: this.players.map(p => ({ name: p.name, shots: p.shots, kills: p.kills, alive: p.alive })),
+      feed: this.feed.filter(f => now - f.t < 8000).map(f => f.text),
+      odds: this.oddsFor(viewer),
     };
   }
 
-  tile(viewer, x, y, now) {
-    const b = this.board;
-    if (b.isWall(x, y)) {
-      const mask = (b.isWall(x, y - 1) ? 1 : 0) | (b.isWall(x + 1, y) ? 2 : 0)
-                 | (b.isWall(x, y + 1) ? 4 : 0) | (b.isWall(x - 1, y) ? 8 : 0);
-      return WALL[mask] + (mask & 2 ? '-' : ' ');
+  oddsFor(p) {
+    let x = p.x + p.fx, y = p.y + p.fy, dist = 1;
+    while (!this.board.isWall(x, y)) {
+      const o = this.playerAt(x, y);
+      if (o && this.visible(p, x, y)) return { name: o.name, chance: Math.round(hitChance(dist) * 100) };
+      if (o) return null;
+      x += p.fx; y += p.fy; dist++;
     }
-
-    // Dead players and finished games see everything.
-    const showAll = this.state === 'over' || !viewer.alive;
-    if (!showAll && !b.canSee(viewer.x, viewer.y, x, y)) {
-      const heard = this.noises.some(n => n.x === x && n.y === y && now - n.t < NOISE_MS);
-      return heard ? '! ' : '  ';
-    }
-
-    const p = this.playerAt(x, y) || this.players.find(o => o.x === x && o.y === y);
-    if (p) {
-      const face = p === viewer ? '@' : p.name[0].toUpperCase();
-      if (!p.alive) return 'X ';
-      if (now < p.scorchUntil) return '*' + face;
-      return face + arrow(p);
-    }
-    if (this.pickups.some(k => k.x === x && k.y === y)) return 'o ';
-
-    // The floor remembers floor shots: % fresh, * recent, , old.
-    let mark = '. ';
-    for (const s of this.burns) {
-      if (s.x !== x || s.y !== y) continue;
-      const age = now - s.t;
-      mark = age < 1000 ? '% ' : age < 5000 ? '* ' : ', ';
-    }
-    return mark;
+    return null;
   }
+
 
   status(p, now) {
     if (this.state === 'waiting') {
@@ -311,16 +409,12 @@ class Game {
       const next = this.startTime + ZONE_START_MS + this.zone * ZONE_EVERY_MS;
       zone = `Walls close in ${Math.ceil((next - now) / 1000)}s`;
     }
-    const reload = now < p.lockoutUntil ? '   (reloading)' : '';
-    return `Ammo: ${p.ammo}   Alive: ${alive}   Time: ${secs}s   ${zone}   Scorch marks: ${this.burns.length}${reload}`;
+    let tag = '';
+    if (p.drawUntil) tag = '   AIMING';
+    else if (now < p.lockoutUntil) tag = '   (reloading)';
+    const ally = p.ally ? `   Ally: ${p.ally.name}` : '';
+    return `Ammo: ${p.ammo}   Alive: ${this.alive().length}   Time: ${secs}s   ${zone}${ally}${tag}`;
   }
-}
-
-function arrow(p) {
-  if (p.fy < 0) return '^';
-  if (p.fy > 0) return 'v';
-  if (p.fx < 0) return '<';
-  return '>';
 }
 
 export { Game };

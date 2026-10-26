@@ -85,17 +85,17 @@ export class Room {
     g.tick(now);
     for (const c of this.conns) {
       send(c.ws, {
-        text: g.render(c.player, now),   // ASCII minimap
-        view: g.view(c.player),          // data for the 3D view
-        status: g.status(c.player, now), // the status line
-        host: g.state === 'waiting' && g.host === c.player && g.code !== null, // show Start?
+        view: g.view(c.player, now),
+        status: g.status(c.player, now),
+        host: g.state === 'waiting' && g.host === c.player && g.code !== null,
         over: g.state === 'over',
+        playing: g.state === 'playing',
       });
     }
     if (g.state === 'over') this.finish(g);
   }
 
-  // Match over: stop the loop, kick everyone back to the menu, save the result
+  // When match over: we stop the loop, kick everyone back to the menu, and save the result to the leaderboard
   async finish(g) {
     clearInterval(this.timer);
     this.timer = null;
@@ -112,4 +112,6 @@ export class Room {
 // Send without crashing if their connection already died
 function send(ws, msg) {
   try { ws.send(JSON.stringify(msg)); } catch {}
+
+  //
 }
